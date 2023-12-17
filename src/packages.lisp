@@ -3,4 +3,5 @@
 (defpackage #:dns
   (:use :cl)
   (:local-nicknames (:a :alexandria) (:s :serapeum))
-  (:import-from :serapeum :->))
+  (:import-from :serapeum :->)
+  (:export #:resolve))

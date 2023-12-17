@@ -1,6 +1,7 @@
 (in-package #:dns)
 
 (deftype uint16 () '(unsigned-byte 16))
+(deftype uint32 () '(unsigned-byte 32))
 (deftype octet () '(unsigned-byte 8))
 
 (defclass message ()
@@ -28,7 +29,7 @@
 (defmethod print-object ((message message) stream)
   (with-slots (header questions answers authorities additionals) message
     (print-unreadable-object (message stream :type t)
-      (format stream "Header: ~A~%Questions: ~A~%Answers: ~A~%Authorities: ~A~%Additionals: ~A"
+      (format stream " Header: ~A~%Questions: ~A~%Answers: ~A~%Authorities: ~A~%Additionals: ~A"
               header questions answers authorities additionals))))
 
 
@@ -136,7 +137,7 @@
    (ttl
     :initarg :ttl
     :initform (error "Must supply a ttl")
-    :type uint16)
+    :type uint32)
    (rdata
     :initarg :rdata
     :initform (error "Must supply a rdata")
@@ -224,8 +225,8 @@
   (make-instance 'domain-name :labels (%decode-labels buffer)))
 
 (defun %decode-labels (buffer)
-  (loop :for len = (fast-io:readu8-be buffer)
-        :until (zerop len)
+  (loop :for len = (fast-io:fast-read-byte buffer :eof-error-p nil)
+        :until (or (null len) (zerop len))
         :if (plusp (logand len +compression-mask+))
           :do (return-from %decode-labels (%decode-compressed-label len buffer))
         :else
@@ -242,7 +243,7 @@
   (let ((name (decode-message 'domain-name buffer))
         (type (fast-io:readu16-be buffer))
         (class (fast-io:readu16-be buffer))
-        (ttl (fast-io:readu16-be buffer))
+        (ttl (fast-io:readu32-be buffer))
         (rdlength (fast-io:readu16-be buffer)))
     (make-instance 'resource-record
                    :name name
@@ -300,7 +301,8 @@
 (defun resolve (domain-name &key (record-type +dns-type-a+) (record-class +dns-class-in+) (resolver *default-resolver*))
   (with-slots (nameserver) resolver
     (let ((query (build-query domain-name :record-type record-type :record-class record-class)))
-      (send-request nameserver query))))
+      (a:when-let ((response (send-request nameserver query)))
+        (decode-from-vector response)))))
 
 (defun send-request (nameserver query)
   (with-slots (ip-address port) nameserver
