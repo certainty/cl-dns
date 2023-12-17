@@ -26,7 +26,7 @@
     :type (or null (vector resource-record)))))
 
 (defmethod print-object ((message message) stream)
-  (with-slots (header question answer authority additional) message
+  (with-slots (header questions answers authorities additionals) message
     (print-unreadable-object (message stream :type t)
       (format stream "Header: ~A~%Questions: ~A~%Answers: ~A~%Authorities: ~A~%Additionals: ~A"
               header questions answers authorities additionals))))
@@ -109,6 +109,12 @@
     :initform (error "Must supply labels")
     :type list)))
 
+(defmethod print-object ((domain-name domain-name) stream)
+  (with-slots (name-labels) domain-name
+    (print-unreadable-object (domain-name stream :type t)
+      (format stream "~{~A~^.~}" name-labels)
+      (format stream "."))))
+
 (defun make-domain-name (name)
   (if (typep name 'domain-name)
       name
@@ -160,10 +166,18 @@
             :do (encode-message question buffer)))))
 
 (defmethod decode-message ((type (eql 'message)) buffer)
-  (let ((header   (decode-message 'message-header buffer))
-        (question (decode-message 'message-question buffer))
-        (record   (decode-message 'resource-record buffer)))
-    (make-instance 'message :header header :questions (vector question) :answers (vector record))))
+  (let ((header (decode-message 'message-header buffer)))
+    (with-slots (qdcount ancount nscount arcount) header
+      (let ((questions (loop :repeat qdcount :collect (decode-message 'message-question buffer)))
+            (answers (loop :repeat ancount :collect (decode-message 'resource-record buffer)))
+            (authorities (loop :repeat nscount :collect (decode-message 'resource-record buffer)))
+            (additionals (loop :repeat arcount :collect (decode-message 'resource-record buffer))))
+        (make-instance 'message
+                       :header header
+                       :questions questions
+                       :answers answers
+                       :authorities authorities
+                       :additionals additionals)))))
 
 (defmethod encode-message ((header message-header) buffer)
   (with-slots (id flags qdcount ancount nscount arcount) header
