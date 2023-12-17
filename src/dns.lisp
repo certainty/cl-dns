@@ -53,7 +53,7 @@
    (flags
     :initarg :flags
     :initform (error "Must supply flags")
-    :type uint16)
+    :type flags)
    (qdcount
     :initarg :qdcount
     :initform (error "Must supply a qdcount")
@@ -81,11 +81,86 @@
       (format stream "ID: ~A~%Flags: ~A~%QDCOUNT: ~A~%ANCOUNT: ~A~%NSCOUNT: ~A~%ARCOUNT: ~A"
               id flags qdcount ancount nscount arcount))))
 
+(defclass flags ()
+  ((qr
+    :initarg :qr
+    :initform (error "Must supply a qr")
+    :type (member +dns-qr-query+ +dns-qr-response+))
+   (opcode
+    :initarg :opcode
+    :initform (error "Must supply an opcode")
+    :type (member +dns-opcode-query+ +dns-opcode-iquery+ +dns-opcode-status+))
+   (aa
+    :initarg :aa
+    :initform nil
+    :type boolean)
+   (tc
+    :initarg :tc
+    :initform nil
+    :type boolean)
+   (rd
+    :initarg :rd
+    :initform nil
+    :type boolean)
+   (ra
+    :initarg :ra
+    :initform nil
+    :type boolean)
+   (z
+    :initarg :z
+    :initform nil
+    :type boolean)
+   (ad
+    :initarg :ad
+    :initform nil
+    :type boolean)
+   (rcode
+    :initarg :rcode
+    :initform 0
+    :type uint16)))
+
+(defmethod print-object ((flags flags) stream)
+  (with-slots (qr opcode aa tc rd ra z ad rcode) flags
+    (print-unreadable-object (flags stream :type t)
+      (format stream "QR: ~A~%OPCODE: ~A~%AA: ~A~%TC: ~A~%RD: ~A~%RA: ~A~%Z: ~A~%AD: ~A~%RCODE: ~A"
+              qr opcode aa tc rd ra z ad rcode))))
+
+(defun make-flags (&key (qr +dns-qr-query+) (opcode +dns-opcode-query+) (aa nil) (tc nil) (rd nil) (ra nil) (z nil) (ad nil) (rcode 0))
+  (make-instance 'flags :qr qr :opcode opcode :aa aa :tc tc :rd rd :ra ra :z z :ad ad :rcode rcode))
+
+(defun flag-set-p (flags bit)
+  (logbitp bit flags))
+
+(defun decode-flags (flag-value)
+  (make-instance 'flags
+                 :qr     (ldb-test (byte 1 15) flag-value)
+                 :opcode (ldb (byte 4 11) flag-value)
+                 :aa     (ldb-test (byte 1 10) flag-value)
+                 :tc     (ldb-test (byte 1 9) flag-value)
+                 :rd     (ldb-test (byte 1 8) flag-value)
+                 :ra     (ldb-test (byte 1 7) flag-value)
+                 :z      (ldb-test (byte 1 6) flag-value)
+                 :rcode  (ldb (byte 4 1) flag-value)))
+
+(defun encode-flags (flags)
+  (let ((encoded-flags 0))
+    (with-slots (qr opcode aa tc rd ra z ad rcode) flags
+      (setf (ldb (byte 1 15) encoded-flags) qr)
+      (setf (ldb (byte 4 11) encoded-flags) opcode)
+      (setf (ldb (byte 1 10) encoded-flags) (if aa 1 0))
+      (setf (ldb (byte 1 9) encoded-flags)  (if tc 1 0))
+      (setf (ldb (byte 1 8) encoded-flags)  (if rd 1 0))
+      (setf (ldb (byte 1 7) encoded-flags)  (if ra 1 0))
+      (setf (ldb (byte 1 6) encoded-flags)  (if z 1 0))
+      (setf (ldb (byte 1 5) encoded-flags)  (if ad 1 0))
+      (setf (ldb (byte 4 1) encoded-flags) rcode)
+      encoded-flags)))
+
 (defclass message-question ()
   ((qname
     :initarg :qname
     :initform (error "Must supply a qname")
-    :type domain-name 
+    :type domain-name
     :documentation
     "A domain name represented as a sequence of labels, where each label consists of a length octet followed by that number of octets.
      The domain name terminates with the zero length octet for the null label of the root.
@@ -184,7 +259,7 @@
 (defmethod encode-message ((header message-header) buffer)
   (with-slots (id flags qdcount ancount nscount arcount) header
     (fast-io:writeu16-be id buffer)
-    (fast-io:writeu16-be flags buffer)
+    (fast-io:writeu16-be (encode-flags flags) buffer)
     (fast-io:writeu16-be qdcount buffer)
     (fast-io:writeu16-be ancount buffer)
     (fast-io:writeu16-be nscount buffer)
@@ -193,7 +268,7 @@
 (defmethod decode-message ((type (eql 'message-header)) buffer)
   (make-instance 'message-header
                  :id (fast-io:readu16-be buffer)
-                 :flags (fast-io:readu16-be buffer)
+                 :flags (decode-flags (fast-io:readu16-be buffer))
                  :qdcount (fast-io:readu16-be buffer)
                  :ancount (fast-io:readu16-be buffer)
                  :nscount (fast-io:readu16-be buffer)
@@ -220,6 +295,7 @@
     (fast-io:writeu8-be 0 buffer)))
 
 (s:defconst +compression-mask+ #b11000000)
+
 (s:defconst +decompression-mask+ #b00111111)
 
 (defmethod decode-message ((type (eql 'domain-name)) buffer)
@@ -253,11 +329,11 @@
                    :ttl ttl
                    :rdata (loop :repeat rdlength :collect (fast-io:readu8-be buffer)))))
 
+
 (defun build-query (domain-name &key (record-type +dns-type-a+) (record-class +dns-class-in+))
   "Build query message for the given domain name."
   (let* ((id (random (ash 1 16)))
-         (want-recursion (ash 1 8))
-         (flags want-recursion))
+         (flags (make-flags :rd t)))
     (make-instance 'message
                    :header  (make-instance 'message-header :id id :flags flags :qdcount 1)
                    :questions
@@ -294,7 +370,7 @@
 
 
 (defun make-resolver (&key (nameserver  *default-nameserver*))
-  (make-instance 'resolver :nameserver nameserver ))
+  (make-instance 'resolver :nameserver nameserver))
 
 (defparameter *default-nameserver* (make-nameserver "8.8.8.8"))
 (defparameter *default-resolver* (make-resolver))
@@ -309,7 +385,7 @@
   (with-slots (ip-address port) nameserver
     (let* ((socket (usocket:socket-connect ip-address port :protocol :datagram :element-type '(unsigned-byte 8)))
            (request-buffer (encode-to-vector query))
-           (response-size 1024)
+           (response-size 512)
            (response-buffer (make-array response-size :element-type '(unsigned-byte 8))))
       (unwind-protect
            (progn
