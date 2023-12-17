@@ -32,7 +32,6 @@
       (format stream " Header: ~A~%Questions: ~A~%Answers: ~A~%Authorities: ~A~%Additionals: ~A"
               header questions answers authorities additionals))))
 
-
 (s:defconst +dns-qr-query+ 0)
 (s:defconst +dns-qr-response+ 1)
 
@@ -121,6 +120,8 @@
       name
       (make-instance 'domain-name :labels (str:split "." name))))
 
+;; TODO: implement different types of resource records using a class hierarchy
+;;
 (defclass resource-record ()
   ((name
     :initarg :name
