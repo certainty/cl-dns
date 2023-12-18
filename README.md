@@ -2,7 +2,10 @@
 
 My take on [Implement DNS in a weekend](https://implement-dns.wizardzines.com/)
 
+
+## Usage
+
 ```common-lisp
-(dns:pretty-print-message (dns:resolve "example.com"))
+(dns:pp (dns:resolve "example.com"))
 ```
 

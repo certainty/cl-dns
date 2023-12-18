@@ -9,4 +9,7 @@
   :depends-on (:serapeum :alexandria :usocket :fast-io :str)
   :components
   ((:file "packages")
-   (:file "dns")))
+   (:file "message")
+   (:file "coding")
+   (:file "resolver")
+   (:file "pretty-print")))

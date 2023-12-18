@@ -6,4 +6,6 @@
   (:import-from :serapeum :->)
   (:export
    #:resolve
-   #:pretty-print-message))
+   #:*nameserver*
+   #:make-nameserver
+   #:pp))

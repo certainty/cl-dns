@@ -1,13 +1,17 @@
-(in-package #:cl-dns)
+(in-package #:dns)
 
-(defun pretty-print-message (message &optional (stream *standard-output*))
+(defun pp (message &optional (stream *standard-output*))
   "Prints the `message' in a human readable format, similar to the format used by the dig command, to the `stream'."
   (with-slots (header questions answers authorities additionals) message
     (print-header header stream)
     (terpri stream)
     (print-questions questions stream)
     (terpri stream)
-    (print-answers answers stream)
+    (print-answers answers "ANSWER" stream)
+    (terpri stream)
+    (print-answers authorities "AUTHORITY" stream)
+    (terpri stream)
+    (print-answers additionals "ADDITIONAL" stream)
     (terpri stream)))
 
 (defun print-header (header &optional (stream *standard-output*))
@@ -41,34 +45,35 @@
   (with-slots (name type class ttl rdata) answer
     (format stream ";; ~20a ~8a ~8a ~8a ~a~%" (domain-name-string name) (type-name type) (record-class-name class) ttl (rdata-string type rdata))))
 
-(defun print-answers (answers &optional (stream *standard-output*))
+(defun print-answers (answers section-name &optional (stream *standard-output*))
   (when answers
-    (format stream ";; ANSWER SECTION:~%")
+    (format stream ";; ~a SECTION:~%" section-name)
     (dolist (answer answers)
       (print-answer answer stream))))
 
 (defun type-name (type)
-  (case type
-    (1 "A")
-    (2 "NS")
-    (5 "CNAME")
-    (6 "SOA")
-    (12 "PTR")
-    (15 "MX")
-    (16 "TXT")
-    (28 "AAAA")
-    (33 "SRV")
-    (41 "OPT")
-    (else (format nil "~a" type))))
+  (s:select type
+    (+rr-type-a+ "A")
+    (+rr-type-ns+ "NS")
+    (+rr-type-cname+ "CNAME")
+    (+rr-type-soa+ "SOA")
+    (+rr-type-ptr+ "PTR")
+    (+rr-type-mx+ "MX")
+    (+rr-type-txt+ "TXT")
+    (+rr-type-aaaa+ "AAAA")
+    (+rr-type-srv+ "SRV")
+    (+rr-type-opt+ "OPT")
+    (t (format nil "~a" type))))
 
 (defun record-class-name (class)
-  (case class
-    (1 "IN")
-    (2 "CS")
-    (3 "CH")
-    (4 "HS")
-    (255 "ANY")
-    (else (format nil "~a" class))))
+  (s:select class
+    (+rr-class-in+ "IN")
+    (+rr-class-cs+ "CS")
+    (+rr-class-ch+ "CH")
+    (+rr-class-hs+ "HS")
+    (+rr-class-none+ "NONE")
+    (+rr-class-any+ "ANY")
+    (t (format nil "~a" class))))
 
 (defun domain-name-string (domain-name)
   (with-output-to-string (stream)
@@ -78,9 +83,10 @@
 
 (defun rdata-string (type rdata)
   (with-output-to-string (stream)
-    (if (eq type 1)
-        (format stream "~a" (format nil "~{~a~^.~}" rdata))
-        (format stream "~a" (rdata-generic-string rdata)))))
-
-(defun rdata-generic-string (rdata)
-  (coerce (mapcar #'char-code rdata) 'string))
+    (s:select type
+      (+rr-type-a+ (format stream "~{~a~^.~}" (loop :for label :across rdata :collect (format nil "~a" label))))
+      (+rr-type-aaaa+ ;; format as ipv6 address
+       (format stream "~{~a~^:~}" (loop :for label :across rdata :collect (format nil "~a" label))))
+      (+rr-type-ns+ (format stream "~a" (domain-name-string (length-encoded-labels-to-domain-name rdata))))
+      (+rr-type-cname+ (format stream "~a" (domain-name-string (length-encoded-labels-to-domain-name rdata))))
+      (t (format stream "~a" rdata)))))
