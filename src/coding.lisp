@@ -139,11 +139,11 @@
   ;; only special case NS and CNAME for now
   ;; as they require decompression of domain names
   (cond
-    ((= type +rr-type-ns+)
+    ((= type (rr-type :ns))
      (decompress-labels buffer))
-    ((= type +rr-type-cname+)
+    ((= type (rr-type :cname))
      (decompress-labels buffer))
     (t
-     (let ((result (make-array len :element-type '(unsigned-byte 8))))
+     (let ((result (make-array len :element-type 'octet)))
        (loop :for i :from 0 :below len :do (setf (aref result i) (fast-io:readu8-be buffer)))
        result))))

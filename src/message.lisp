@@ -9,8 +9,6 @@
 (s:defconst +dns-opcode-query+ 0)
 (s:defconst +dns-opcode-iquery+ 1)
 (s:defconst +dns-opcode-status+ 2)
-(s:defconst +dns-type-a+ 1)
-(s:defconst +dns-class-in+ 1)
 
 (defclass message ()
   ((header
@@ -161,26 +159,38 @@
           :collect (coerce (loop :repeat len :collect (code-char (fast-io:readu8-be buffer))) 'string) :into labels
           :finally (return (make-instance 'domain-name :labels labels)))))
 
-(s:defconst +rr-type-a+ 1)
-(s:defconst +rr-type-ns+ 2)
-(s:defconst +rr-type-cname+ 5)
-(s:defconst +rr-type-soa+ 6)
-(s:defconst +rr-type-wks+ 11)
-(s:defconst +rr-type-ptr+ 12)
-(s:defconst +rr-type-hinfo+ 13)
-(s:defconst +rr-type-mx+ 15)
-(s:defconst +rr-type-txt+ 16)
-(s:defconst +rr-type-aaaa+ 28)
-(s:defconst +rr-type-srv+ 33)
-(s:defconst +rr-type-naptr+ 35)
-(s:defconst +rr-type-ds+ 43)
-(s:defconst +rr-type-rrsig+ 46)
+(s:defconst +rr-types+
+  (s:dict
+   :a 1
+   :ns 2
+   :cname 5
+   :soa 6
+   :wks 11
+   :ptr 12
+   :hinfo 13
+   :mx 15
+   :txt 16
+   :aaaa 28
+   :srv 33
+   :naptr 35
+   :ds 43
+   :rrsig 46))
 
-(s:defconst +rr-class-in+ 1)
-(s:defconst +rr-class-cs+ 2)
-(s:defconst +rr-class-ch+ 3)
-(s:defconst +rr-class-hs+ 4)
-(s:defconst +rr-class-any+ 255)
+(s:defconst +rr-class+ (s:dict :in 1 :cs 2 :ch 3 :hs 4 :any 255))
+
+(deftype rr-type-t ()
+  '(member :a :ns :cname :soa :wks :hinfo :mx :txt :aaaa :srv :ptr :naptr :ds :rrsig))
+
+(deftype rr-class-t ()
+  '(member :in :cs :ch :hs :any))
+
+(-> rr-type (rr-type-t) fixnum)
+(defun rr-type (tpe)
+  (gethash tpe +rr-types+))
+
+(-> rr-class (rr-class-t) fixnum)
+(defun rr-class (cls)
+  (gethash cls +rr-class+))
 
 (defclass resource-record ()
   ((name
@@ -203,3 +213,9 @@
     :initarg :rdata
     :initform (error "Must supply a rdata")
     :type (vector octet))))
+
+(defun authoritive-nameservers (message)
+  (with-slots (authorities) message
+    (loop :for rr :in authorities
+          :when (= (slot-value rr 'type) (rr-type :ns))
+            :collect (domain-name-string (length-encoded-labels-to-domain-name (slot-value rr 'rdata))))))

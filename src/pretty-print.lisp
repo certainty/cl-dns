@@ -52,27 +52,26 @@
       (print-answer answer stream))))
 
 (defun type-name (type)
-  (s:select type
-    (+rr-type-a+ "A")
-    (+rr-type-ns+ "NS")
-    (+rr-type-cname+ "CNAME")
-    (+rr-type-soa+ "SOA")
-    (+rr-type-ptr+ "PTR")
-    (+rr-type-mx+ "MX")
-    (+rr-type-txt+ "TXT")
-    (+rr-type-aaaa+ "AAAA")
-    (+rr-type-srv+ "SRV")
-    (+rr-type-opt+ "OPT")
+  (cond
+    ((= type (rr-type :a)) "A")
+    ((= type (rr-type :ns)) "NS")
+    ((= type (rr-type :cname)) "CNAME")
+    ((= type (rr-type :soa)) "SOA")
+    ((= type (rr-type :ptr)) "PTR")
+    ((= type (rr-type :mx)) "MX")
+    ((= type (rr-type :txt)) "TXT")
+    ((= type (rr-type :aaaa)) "AAAA")
+    ((= type (rr-type :srv)) "SRV")
+    ((= type (rr-type :ns)) "NS")
     (t (format nil "~a" type))))
 
 (defun record-class-name (class)
-  (s:select class
-    (+rr-class-in+ "IN")
-    (+rr-class-cs+ "CS")
-    (+rr-class-ch+ "CH")
-    (+rr-class-hs+ "HS")
-    (+rr-class-none+ "NONE")
-    (+rr-class-any+ "ANY")
+  (cond
+    ((= class (rr-class :in)) "IN")
+    ((= class (rr-class :cs)) "CS")
+    ((= class (rr-class :ch)) "CH")
+    ((= class (rr-class :hs)) "HS")
+    ((= class (rr-class :any)) "ANY")
     (t (format nil "~a" class))))
 
 (defun domain-name-string (domain-name)
@@ -83,10 +82,11 @@
 
 (defun rdata-string (type rdata)
   (with-output-to-string (stream)
-    (s:select type
-      (+rr-type-a+ (format stream "~{~a~^.~}" (loop :for label :across rdata :collect (format nil "~a" label))))
-      (+rr-type-aaaa+ ;; format as ipv6 address
+    (cond
+      ((= type (rr-type :a)) (format stream "~{~a~^.~}" (loop :for label :across rdata :collect (format nil "~a" label))))
+      ((= type (rr-type :aaaa)) ;; format as ipv6 address
        (format stream "~{~a~^:~}" (loop :for label :across rdata :collect (format nil "~a" label))))
-      (+rr-type-ns+ (format stream "~a" (domain-name-string (length-encoded-labels-to-domain-name rdata))))
-      (+rr-type-cname+ (format stream "~a" (domain-name-string (length-encoded-labels-to-domain-name rdata))))
+      ((= type (rr-type :ns)) (format stream "~a" (domain-name-string (length-encoded-labels-to-domain-name rdata))))
+      ((= type (rr-type :cname)) (format stream "~a" (domain-name-string (length-encoded-labels-to-domain-name rdata))))
+      ((= type (rr-type :txt)) (format stream "~a" (sb-ext:octets-to-string rdata :external-format :utf-8)))
       (t (format stream "~a" rdata)))))
